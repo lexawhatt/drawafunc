@@ -1,1 +1,35 @@
-/target
+# Rust build artifacts
+/target/
+
+# Local project notes / private planning
+/idea.md
+
+# Local app state
+/drawafunc_project.json
+
+# Codex / agent local metadata
+/.codex/
+/.agents/
+
+# IDE/editor local state
+/.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets.*
+credentials.*
+
+# OS files
+.DS_Store
+Thumbs.db
