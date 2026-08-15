@@ -1,9 +1,11 @@
 use eframe::egui::{self, Color32, Context, Key, Pos2, Rect, Vec2};
 
-use crate::desmos;
-use crate::geometry::{distance_to_polyline, simplify_points, smooth_points};
+use crate::generation;
+use crate::geometry::{distance_to_polyline, smooth_points};
 use crate::model::{DrawStroke, Point};
 use crate::persistence::{self, PROJECT_FILE, project_hash};
+use crate::settings::{GenerationSettings, OutputMode, QualityPreset};
+use crate::shapes::ShapeTool;
 
 pub(crate) const MIN_ZOOM: f32 = 8.0;
 pub(crate) const MAX_ZOOM: f32 = 260.0;
@@ -12,6 +14,11 @@ pub(crate) const INITIAL_ZOOM: f32 = 42.0;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Tool {
     Pencil,
+    Line,
+    Rectangle,
+    Circle,
+    Heart,
+    Star,
     Eraser,
     Pan,
 }
@@ -33,6 +40,9 @@ pub(crate) struct DrawafuncApp {
     pub(crate) pan: Vec2,
     pub(crate) stroke_width: f32,
     pub(crate) simplify_tolerance: f32,
+    pub(crate) quality: QualityPreset,
+    pub(crate) output_mode: OutputMode,
+    pub(crate) polynomial_degree: usize,
     pub(crate) generated_preview: Vec<Vec<Point>>,
     pub(crate) generated_text: String,
     pub(crate) status: String,
@@ -41,6 +51,7 @@ pub(crate) struct DrawafuncApp {
     pub(crate) show_original: bool,
     pub(crate) show_generated: bool,
     pub(crate) show_grid: bool,
+    pub(crate) drag_shape_start: Option<Point>,
 }
 
 impl DrawafuncApp {
@@ -60,6 +71,9 @@ impl DrawafuncApp {
             pan: Vec2::ZERO,
             stroke_width: 2.0,
             simplify_tolerance: 0.08,
+            quality: QualityPreset::Default,
+            output_mode: OutputMode::Auto,
+            polynomial_degree: 4,
             generated_preview: Vec::new(),
             generated_text: String::new(),
             status: "Draw on the canvas, then press Generate.".to_owned(),
@@ -68,6 +82,7 @@ impl DrawafuncApp {
             show_original: true,
             show_generated: true,
             show_grid: true,
+            drag_shape_start: None,
         }
     }
 
@@ -130,6 +145,25 @@ impl DrawafuncApp {
         }
     }
 
+    pub(crate) fn shape_tool(&self) -> Option<ShapeTool> {
+        match self.tool {
+            Tool::Line => Some(ShapeTool::Line),
+            Tool::Rectangle => Some(ShapeTool::Rectangle),
+            Tool::Circle => Some(ShapeTool::Circle),
+            Tool::Heart => Some(ShapeTool::Heart),
+            Tool::Star => Some(ShapeTool::Star),
+            Tool::Pencil | Tool::Eraser | Tool::Pan => None,
+        }
+    }
+
+    pub(crate) fn add_stroke(&mut self, stroke: DrawStroke) {
+        if stroke.points.len() >= 2 {
+            self.strokes.push(stroke);
+            self.redo_stack.clear();
+            self.invalidate_generation("Object added. Press Generate to refresh output.");
+        }
+    }
+
     pub(crate) fn erase_at(&mut self, point: Point) {
         let radius = 14.0 / self.zoom;
         let before = self.strokes.len();
@@ -163,6 +197,7 @@ impl DrawafuncApp {
 
         self.strokes.clear();
         self.redo_stack.clear();
+        self.drag_shape_start = None;
         self.generated_preview.clear();
         self.generated_text.clear();
         self.status = "Canvas cleared.".to_owned();
@@ -177,48 +212,19 @@ impl DrawafuncApp {
     }
 
     pub(crate) fn generate(&mut self) {
-        self.generated_preview.clear();
-        self.generated_text.clear();
+        let result = generation::generate(
+            &self.strokes,
+            GenerationSettings {
+                quality: self.quality,
+                output_mode: self.output_mode,
+                simplify_tolerance: self.simplify_tolerance,
+                polynomial_degree: self.polynomial_degree,
+            },
+        );
 
-        if self.strokes.is_empty() {
-            self.status = "Nothing to generate yet.".to_owned();
-            return;
-        }
-
-        let mut expression_count = 0;
-        let mut skipped = 0;
-        let mut segments = Vec::new();
-
-        for stroke in &self.strokes {
-            let simplified = simplify_points(&stroke.points, self.simplify_tolerance);
-            if simplified.len() < 2 {
-                skipped += 1;
-                continue;
-            }
-
-            for pair in simplified.windows(2) {
-                let a = pair[0];
-                let b = pair[1];
-                if a.distance(b) >= f32::EPSILON {
-                    segments.push((a, b));
-                    expression_count += 1;
-                }
-            }
-            self.generated_preview.push(simplified);
-        }
-
-        self.generated_text = desmos::batched_segments(&segments);
-        self.status = if expression_count == 0 {
-            "Generation failed: strokes are too short after simplification.".to_owned()
-        } else if skipped > 0 {
-            format!(
-                "Generated {expression_count} segments as one Desmos list-batched parametric curve. Skipped {skipped} tiny stroke(s)."
-            )
-        } else {
-            format!(
-                "Generated {expression_count} segments as one Desmos list-batched parametric curve."
-            )
-        };
+        self.generated_preview = result.scene.preview_paths;
+        self.generated_text = result.export_text;
+        self.status = result.status;
     }
 
     pub(crate) fn save_project(&mut self) {

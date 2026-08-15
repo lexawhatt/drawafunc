@@ -7,6 +7,8 @@ use crate::app::{DrawafuncApp, INITIAL_ZOOM, MAX_ZOOM, MIN_ZOOM, ThemeChoice, To
 use crate::geometry::nice_grid_step;
 use crate::model::Point;
 use crate::persistence::project_hash;
+use crate::settings::{OutputMode, QualityPreset};
+use crate::shapes::{make_shape_stroke, shape_points};
 
 impl DrawafuncApp {
     pub(crate) fn render(&mut self, ctx: &Context) {
@@ -96,11 +98,32 @@ impl DrawafuncApp {
     fn side_bar(&mut self, ui: &mut Ui) {
         ui.heading("Tools");
         ui.radio_value(&mut self.tool, Tool::Pencil, "Pencil");
+        ui.radio_value(&mut self.tool, Tool::Line, "Line");
+        ui.radio_value(&mut self.tool, Tool::Rectangle, "Rectangle");
+        ui.radio_value(&mut self.tool, Tool::Circle, "Circle");
+        ui.radio_value(&mut self.tool, Tool::Heart, "Heart");
+        ui.radio_value(&mut self.tool, Tool::Star, "Star");
         ui.radio_value(&mut self.tool, Tool::Eraser, "Eraser");
         ui.radio_value(&mut self.tool, Tool::Pan, "Pan");
 
         ui.add_space(10.0);
-        ui.heading("Stroke");
+        ui.heading("Generation");
+        egui::ComboBox::from_id_salt("quality")
+            .selected_text(self.quality.label())
+            .show_ui(ui, |ui| {
+                for quality in QualityPreset::ALL {
+                    ui.selectable_value(&mut self.quality, quality, quality.label());
+                }
+            });
+        egui::ComboBox::from_id_salt("output_mode")
+            .selected_text(self.output_mode.label())
+            .show_ui(ui, |ui| {
+                for mode in OutputMode::ALL {
+                    ui.selectable_value(&mut self.output_mode, mode, mode.label());
+                }
+            });
+        ui.add(Slider::new(&mut self.polynomial_degree, 1..=8).text("Polynomial degree"));
+        ui.add_space(6.0);
         ui.add(Slider::new(&mut self.stroke_width, 1.0..=8.0).text("Width"));
         ui.add(Slider::new(&mut self.simplify_tolerance, 0.01..=0.6).text("Simplify"));
 
@@ -166,13 +189,28 @@ impl DrawafuncApp {
             self.pan += delta;
         }
 
+        if self.shape_tool().is_some() && response.drag_started_by(PointerButton::Primary) {
+            if let Some(pos) = pointer_pos {
+                self.drag_shape_start = Some(self.screen_to_math(pos, rect));
+            }
+        }
+
+        if self.shape_tool().is_some() && response.drag_stopped_by(PointerButton::Primary) {
+            if let (Some(shape), Some(start), Some(pos)) =
+                (self.shape_tool(), self.drag_shape_start.take(), pointer_pos)
+            {
+                let color = active_draw_color(visuals.dark_mode);
+                let end = self.screen_to_math(pos, rect);
+                if let Some(stroke) = make_shape_stroke(shape, start, end, color, self.stroke_width)
+                {
+                    self.add_stroke(stroke);
+                }
+            }
+        }
+
         if self.tool == Tool::Pencil && response.drag_started_by(PointerButton::Primary) {
             if let Some(pos) = pointer_pos {
-                let color = if visuals.dark_mode {
-                    Color32::from_rgb(235, 238, 244)
-                } else {
-                    Color32::from_rgb(23, 26, 31)
-                };
+                let color = active_draw_color(visuals.dark_mode);
                 self.start_stroke(color, self.screen_to_math(pos, rect));
             }
         }
@@ -218,6 +256,20 @@ impl DrawafuncApp {
             }
         }
 
+        if let (Some(shape), Some(start), Some(pos)) =
+            (self.shape_tool(), self.drag_shape_start, pointer_pos)
+        {
+            if let Some(points) = shape_points(shape, start, self.screen_to_math(pos, rect)) {
+                self.paint_polyline(
+                    &painter,
+                    rect,
+                    &points,
+                    Color32::from_rgb(85, 170, 255),
+                    self.stroke_width,
+                );
+            }
+        }
+
         if self.show_generated {
             let generated_color = if visuals.dark_mode {
                 Color32::from_rgb(73, 209, 151)
@@ -239,7 +291,10 @@ impl DrawafuncApp {
             }
         }
 
-        if self.strokes.is_empty() && self.current_stroke.is_none() {
+        if self.strokes.is_empty()
+            && self.current_stroke.is_none()
+            && self.drag_shape_start.is_none()
+        {
             painter.text(
                 rect.center(),
                 Align2::CENTER_CENTER,
@@ -323,5 +378,13 @@ impl DrawafuncApp {
                 EguiStroke::new(width, color),
             );
         }
+    }
+}
+
+fn active_draw_color(dark_mode: bool) -> Color32 {
+    if dark_mode {
+        Color32::from_rgb(235, 238, 244)
+    } else {
+        Color32::from_rgb(23, 26, 31)
     }
 }

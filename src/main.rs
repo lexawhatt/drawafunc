@@ -1,8 +1,12 @@
 mod app;
 mod desmos;
+mod generation;
 mod geometry;
 mod model;
 mod persistence;
+mod primitives;
+mod settings;
+mod shapes;
 mod ui;
 
 use app::DrawafuncApp;
