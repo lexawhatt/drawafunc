@@ -91,7 +91,7 @@ pub(crate) fn export_exponential(
     }
 
     let expression = format!(
-        "y={}{}e^({}x)",
+        "y={}{}*e^{{{}*x}}",
         fmt_num(offset),
         fmt_signed(amplitude),
         fmt_num(rate)
@@ -255,10 +255,11 @@ mod tests {
 
     #[test]
     fn exponential_export_can_include_domain() {
-        assert_eq!(
-            export_exponential(2.0, -0.5, 1.0, Some((0.0, 3.0))),
-            "y=1+2e^(-0.5x)\\left\\{0\\le x\\le 3\\right\\}"
-        );
+        let export = export_exponential(2.0, -0.5, 1.0, Some((0.0, 3.0)));
+
+        assert_eq!(export, "y=1+2*e^{-0.5*x}\\left\\{0\\le x\\le 3\\right\\}");
+        assert!(!export.contains("e^("));
+        assert!(!export.contains("2e"));
     }
 
     #[test]

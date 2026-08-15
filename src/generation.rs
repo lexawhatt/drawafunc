@@ -406,7 +406,7 @@ impl ExponentialFit {
             && self.rate.is_finite()
             && self.offset.is_finite()
             && self.max_error.is_finite()
-            && self.amplitude.abs() >= 0.000_001
+            && self.amplitude.abs() >= 0.0001
             && self.amplitude.abs() <= 1_000_000.0
             && self.rate.abs() <= 12.0
             && self.offset.abs() <= 1_000_000.0
