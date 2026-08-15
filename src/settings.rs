@@ -43,16 +43,18 @@ pub(crate) enum OutputMode {
     Lines,
     Bezier,
     Mixed,
-    FunctionFit,
+    ExperimentalPolynomial,
+    ExperimentalExponential,
 }
 
 impl OutputMode {
-    pub(crate) const ALL: [Self; 5] = [
+    pub(crate) const ALL: [Self; 6] = [
         Self::Auto,
         Self::Lines,
         Self::Bezier,
         Self::Mixed,
-        Self::FunctionFit,
+        Self::ExperimentalPolynomial,
+        Self::ExperimentalExponential,
     ];
 
     pub(crate) fn label(self) -> &'static str {
@@ -61,7 +63,8 @@ impl OutputMode {
             Self::Lines => "Lines",
             Self::Bezier => "Bezier",
             Self::Mixed => "Mixed",
-            Self::FunctionFit => "Function fit",
+            Self::ExperimentalPolynomial => "Experimental polynomial",
+            Self::ExperimentalExponential => "Experimental exponential",
         }
     }
 }
@@ -77,5 +80,19 @@ pub(crate) struct GenerationSettings {
 impl GenerationSettings {
     pub(crate) fn effective_tolerance(self) -> f32 {
         (self.simplify_tolerance * self.quality.tolerance_multiplier()).max(0.001)
+    }
+
+    pub(crate) fn function_fit_error_tolerance(self) -> f32 {
+        let preset_floor: f32 = match self.quality {
+            QualityPreset::Rough => 0.45,
+            QualityPreset::Default => 0.22,
+            QualityPreset::Smooth => 0.16,
+            QualityPreset::Precise => 0.08,
+        };
+        preset_floor.max(self.effective_tolerance() * 2.0)
+    }
+
+    pub(crate) fn function_fit_degree_cap(self) -> usize {
+        self.polynomial_degree.clamp(1, 3)
     }
 }

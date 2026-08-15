@@ -32,7 +32,7 @@ pub(crate) fn export_mixed(primitives: &[GeneratedPrimitive]) -> String {
     groups.join("\n")
 }
 
-pub(crate) fn export_polynomial(coefficients: &[f32]) -> String {
+pub(crate) fn export_polynomial(coefficients: &[f32], domain: Option<(f32, f32)>) -> String {
     if coefficients.is_empty() {
         return String::new();
     }
@@ -62,10 +62,50 @@ pub(crate) fn export_polynomial(coefficients: &[f32]) -> String {
         }
     }
 
-    if parts.is_empty() {
+    let expression = if parts.is_empty() {
         "y=0".to_owned()
     } else {
         format!("y={}", parts.join(""))
+    };
+
+    match domain {
+        Some((min_x, max_x)) => {
+            format!(
+                "{expression}\\left\\{{{}\\le x\\le {}\\right\\}}",
+                fmt_num(min_x),
+                fmt_num(max_x)
+            )
+        }
+        None => expression,
+    }
+}
+
+pub(crate) fn export_exponential(
+    amplitude: f32,
+    rate: f32,
+    offset: f32,
+    domain: Option<(f32, f32)>,
+) -> String {
+    if !amplitude.is_finite() || !rate.is_finite() || !offset.is_finite() {
+        return String::new();
+    }
+
+    let expression = format!(
+        "y={}{}e^({}x)",
+        fmt_num(offset),
+        fmt_signed(amplitude),
+        fmt_num(rate)
+    );
+
+    match domain {
+        Some((min_x, max_x)) => {
+            format!(
+                "{expression}\\left\\{{{}\\le x\\le {}\\right\\}}",
+                fmt_num(min_x),
+                fmt_num(max_x)
+            )
+        }
+        None => expression,
     }
 }
 
@@ -81,11 +121,11 @@ fn batched_segments(segments: impl IntoIterator<Item = (Point, Point)>) -> Strin
     let y2: Vec<_> = segments.iter().map(|(_, b)| b.y).collect();
 
     [
-        format!("LX_1={}", fmt_num_list(&x1)),
-        format!("LX_2={}", fmt_num_list(&x2)),
-        format!("LY_1={}", fmt_num_list(&y1)),
-        format!("LY_2={}", fmt_num_list(&y2)),
-        "(LX_1+(LX_2-LX_1)*t,LY_1+(LY_2-LY_1)*t)".to_owned(),
+        format!("U_1={}", fmt_num_list(&x1)),
+        format!("U_2={}", fmt_num_list(&x2)),
+        format!("V_1={}", fmt_num_list(&y1)),
+        format!("V_2={}", fmt_num_list(&y2)),
+        "(U_1+(U_2-U_1)*t,V_1+(V_2-V_1)*t)".to_owned(),
     ]
     .join("\n")
 }
@@ -96,25 +136,25 @@ fn batched_beziers(beziers: impl IntoIterator<Item = CubicBezier>) -> String {
         return String::new();
     }
 
-    let bx0: Vec<_> = beziers.iter().map(|bezier| bezier.p0.x).collect();
-    let bx1: Vec<_> = beziers.iter().map(|bezier| bezier.p1.x).collect();
-    let bx2: Vec<_> = beziers.iter().map(|bezier| bezier.p2.x).collect();
-    let bx3: Vec<_> = beziers.iter().map(|bezier| bezier.p3.x).collect();
+    let ax0: Vec<_> = beziers.iter().map(|bezier| bezier.p0.x).collect();
+    let ax1: Vec<_> = beziers.iter().map(|bezier| bezier.p1.x).collect();
+    let ax2: Vec<_> = beziers.iter().map(|bezier| bezier.p2.x).collect();
+    let ax3: Vec<_> = beziers.iter().map(|bezier| bezier.p3.x).collect();
     let by0: Vec<_> = beziers.iter().map(|bezier| bezier.p0.y).collect();
     let by1: Vec<_> = beziers.iter().map(|bezier| bezier.p1.y).collect();
     let by2: Vec<_> = beziers.iter().map(|bezier| bezier.p2.y).collect();
     let by3: Vec<_> = beziers.iter().map(|bezier| bezier.p3.y).collect();
 
     [
-        format!("BX_0={}", fmt_num_list(&bx0)),
-        format!("BX_1={}", fmt_num_list(&bx1)),
-        format!("BX_2={}", fmt_num_list(&bx2)),
-        format!("BX_3={}", fmt_num_list(&bx3)),
-        format!("BY_0={}", fmt_num_list(&by0)),
-        format!("BY_1={}", fmt_num_list(&by1)),
-        format!("BY_2={}", fmt_num_list(&by2)),
-        format!("BY_3={}", fmt_num_list(&by3)),
-        "((1-t)^3*BX_0+3*(1-t)^2*t*BX_1+3*(1-t)*t^2*BX_2+t^3*BX_3,(1-t)^3*BY_0+3*(1-t)^2*t*BY_1+3*(1-t)*t^2*BY_2+t^3*BY_3)".to_owned(),
+        format!("A_0={}", fmt_num_list(&ax0)),
+        format!("A_1={}", fmt_num_list(&ax1)),
+        format!("A_2={}", fmt_num_list(&ax2)),
+        format!("A_3={}", fmt_num_list(&ax3)),
+        format!("B_0={}", fmt_num_list(&by0)),
+        format!("B_1={}", fmt_num_list(&by1)),
+        format!("B_2={}", fmt_num_list(&by2)),
+        format!("B_3={}", fmt_num_list(&by3)),
+        "((1-t)^3*A_0+3*(1-t)^2*t*A_1+3*(1-t)*t^2*A_2+t^3*A_3,(1-t)^3*B_0+3*(1-t)^2*t*B_1+3*(1-t)*t^2*B_2+t^3*B_3)".to_owned(),
     ]
     .join("\n")
 }
@@ -138,6 +178,14 @@ fn fmt_num(value: f32) -> String {
         text.pop();
     }
     text
+}
+
+fn fmt_signed(value: f32) -> String {
+    if value < 0.0 {
+        format!("-{}", fmt_num(value.abs()))
+    } else {
+        format!("+{}", fmt_num(value))
+    }
 }
 
 #[cfg(test)]
@@ -168,11 +216,11 @@ mod tests {
         assert_eq!(
             export,
             [
-                "LX_1=[0,-2]",
-                "LX_2=[2,-2]",
-                "LY_1=[1,1]",
-                "LY_2=[3,-3]",
-                "(LX_1+(LX_2-LX_1)*t,LY_1+(LY_2-LY_1)*t)",
+                "U_1=[0,-2]",
+                "U_2=[2,-2]",
+                "V_1=[1,1]",
+                "V_2=[3,-3]",
+                "(U_1+(U_2-U_1)*t,V_1+(V_2-V_1)*t)",
             ]
             .join("\n")
         );
@@ -187,13 +235,34 @@ mod tests {
             p3: Point { x: 2.0, y: 1.0 },
         })]);
 
-        assert!(export.contains("BX_0=[0]"));
-        assert!(export.contains("BY_3=[1]"));
-        assert!(export.contains("(1-t)^3*BX_0"));
+        assert!(export.contains("A_0=[0]"));
+        assert!(export.contains("B_3=[1]"));
+        assert!(export.contains("(1-t)^3*A_0"));
     }
 
     #[test]
     fn polynomial_export_is_real_function() {
-        assert_eq!(export_polynomial(&[1.0, 2.0, -3.0]), "y=-3x^2+2x+1");
+        assert_eq!(export_polynomial(&[1.0, 2.0, -3.0], None), "y=-3x^2+2x+1");
+    }
+
+    #[test]
+    fn polynomial_export_can_include_domain() {
+        assert_eq!(
+            export_polynomial(&[1.0, 2.0], Some((-1.5, 3.0))),
+            "y=2x+1\\left\\{-1.5\\le x\\le 3\\right\\}"
+        );
+    }
+
+    #[test]
+    fn exponential_export_can_include_domain() {
+        assert_eq!(
+            export_exponential(2.0, -0.5, 1.0, Some((0.0, 3.0))),
+            "y=1+2e^(-0.5x)\\left\\{0\\le x\\le 3\\right\\}"
+        );
+    }
+
+    #[test]
+    fn exponential_export_rejects_non_finite_coefficients() {
+        assert!(export_exponential(f32::INFINITY, 1.0, 0.0, None).is_empty());
     }
 }

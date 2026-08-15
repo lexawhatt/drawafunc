@@ -122,7 +122,7 @@ impl DrawafuncApp {
                     ui.selectable_value(&mut self.output_mode, mode, mode.label());
                 }
             });
-        ui.add(Slider::new(&mut self.polynomial_degree, 1..=8).text("Polynomial degree"));
+        ui.add(Slider::new(&mut self.polynomial_degree, 1..=3).text("Polynomial max degree"));
         ui.add_space(6.0);
         ui.add(Slider::new(&mut self.stroke_width, 1.0..=8.0).text("Width"));
         ui.add(Slider::new(&mut self.simplify_tolerance, 0.01..=0.6).text("Simplify"));

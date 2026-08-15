@@ -73,7 +73,7 @@ impl DrawafuncApp {
             simplify_tolerance: 0.08,
             quality: QualityPreset::Default,
             output_mode: OutputMode::Auto,
-            polynomial_degree: 4,
+            polynomial_degree: 3,
             generated_preview: Vec::new(),
             generated_text: String::new(),
             status: "Draw on the canvas, then press Generate.".to_owned(),
